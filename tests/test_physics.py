@@ -3,49 +3,51 @@ import pytest
 
 import src.constants as const
 from src.integrators import RK4
-from src.physics import calc_derivative
+from src.models import AstralBody
+from src.physics import CentralGravity
 
 
-def test_radius():
+@pytest.fixture
+def iss_satelite() -> AstralBody:
+    r = 6778137.0
+    v1 = np.sqrt(const.EARTH_MU / r)
+    state = np.array([r, 0.0, 0.0, 0.0, v1, 0.0])
+    return AstralBody.from_state(state, CentralGravity(), RK4())
+
+
+def test_radius(iss_satelite):
     r = 6778137.0
     t = 0.0
-    v1 = np.sqrt(const.EARTH_MU / r)
     T = 2 * np.pi * np.sqrt(r**3 / const.EARTH_MU)
     h = T / 5554
-    state = np.array([r, 0.0, 0.0, 0.0, v1, 0.0])
     for _ in range(5554):
-        state = RK4(calc_derivative, t, state, h)
+        iss_satelite.step(t, h)
         t += h
-    assert np.linalg.norm(state[0:3]) == pytest.approx(r, rel=1e-7)
+    assert np.linalg.norm(iss_satelite.radius) == pytest.approx(r, rel=1e-7)
 
 
-def test_low_orbit():  # ISS
+def test_low_orbit(iss_satelite):  # ISS
     r = 6778137.0
     t = 0.0
-    v1 = np.sqrt(const.EARTH_MU / r)
     T = 2 * np.pi * np.sqrt(r**3 / const.EARTH_MU)
     h = T / 5554
-    state = np.array([r, 0.0, 0.0, 0.0, v1, 0.0])
+    v1 = np.sqrt(const.EARTH_MU / r)
     for _ in range(5554):
-        state = RK4(calc_derivative, t, state, h)
+        iss_satelite.step(t, h)
         t += h
-    assert state == pytest.approx(
+    assert iss_satelite.get_state() == pytest.approx(
         np.array([r, 0.0, 0.0, 0.0, v1, 0.0]), rel=1e-7, abs=1e-5
     )
 
 
-def test_energy_conservation():
+def test_energy_conservation(iss_satelite):
     r = 6778137.0
     t = 0.0
-    v1 = np.sqrt(const.EARTH_MU / r)
     T = 2 * np.pi * np.sqrt(r**3 / const.EARTH_MU)
     h = T / 5554
-    state = np.array([r, 0.0, 0.0, 0.0, v1, 0.0])
-    e_start = (v1**2) / 2 - const.EARTH_MU / r
+    e_start = (iss_satelite.speed**2) / 2 - const.EARTH_MU / iss_satelite.radius
     for _ in range(5554):
-        state = RK4(calc_derivative, t, state, h)
+        iss_satelite.step(t, h)
         t += h
-    e_end = (np.linalg.norm(state[3:6]) ** 2) / 2 - const.EARTH_MU / np.linalg.norm(
-        state[0:3]
-    )
+    e_end = (iss_satelite.speed**2) / 2 - const.EARTH_MU / iss_satelite.radius
     assert e_start == pytest.approx(e_end, rel=1e-10)
